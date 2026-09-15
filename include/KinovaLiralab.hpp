@@ -133,6 +133,8 @@ namespace KinovaLiralab
             void TorqueControlExample();
             void TorqueControl();
             void SetEquilibriumPose(KDL::Frame ee);
+            void SetEquilibriumPoseWithCustomVelocity(KDL::Frame ee,float maxLinearVelocity);
+            void WaitUntilReachedPosition(const KDL::Frame& finalPosition, double treshold = 0.01, int msPollingTime = 100);
             void StartHandGuidance();
             void StopApp();
             auto GetRobotState()    -> KinovaLiralab::RobotState;

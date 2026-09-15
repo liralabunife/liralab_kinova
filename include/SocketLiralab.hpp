@@ -26,6 +26,7 @@ namespace KinovaLiralab
         int Write(const std::string&);
         auto Read() -> std::string;
         int ReadFrame(KDL::Frame&);
+        float ReadGridStep();
     };
     
     SocketLiralab::SocketLiralab(uint16_t port, std::function<void()> brokenPipeCallback)
@@ -115,6 +116,21 @@ namespace KinovaLiralab
         outFrame.p = p;
         outFrame.M = R;
         return 0;
+    }
+
+    float SocketLiralab::ReadGridStep()
+    {
+        std::string resultAsString = Read();
+
+        std::vector<double> v;
+        std::stringstream ss(resultAsString);
+        std::string token;
+
+        while (std::getline(ss, token, ';')) {
+            v.push_back(std::stod(token));
+        }
+        if(v.size() == 0) return -1.0;
+        return v[0];
     }
     
     void SocketLiralab::CloseSocket()

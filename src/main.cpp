@@ -193,15 +193,14 @@ int main(int argc, char **argv)
     // ********************************************
     // **************** RUN ACT *******************
     // ********************************************
-    
     {
-        
+        /*
         bool useForceSensor = true;
         TerminationHandler t;
         CanDevice* forceSensor;
         if(useForceSensor) forceSensor = new CanDevice();
         KinovaLiralab::Robot* robot = new KinovaLiralab::Robot("/home/legion/ROS/kinova_ws/src/liralab_kinova/urdf/gen3_ESAOTE_FTSense.urdf"); // _ESAOTE_convex_probe
-        KinovaLiralab::SocketLiralab socket{5003, [&robot]{robot->StopApp();}};
+        KinovaLiralab::SocketLiralab socket{5009, [&robot]{robot->StopApp();}};
 
         // Subscribe callbacks for CTRL-C signal
         TerminationHandler::RegisterCallback([&robot](){robot->StopApp();});
@@ -236,7 +235,14 @@ int main(int argc, char **argv)
         while(socket.Read() != "RUN");
         robot->StopApp();
         robot->TorqueControl();
-        std::this_thread::sleep_for(std::chrono::milliseconds(2000));
+        std::cout << "Wait for torque control... [3]" << std::flush;
+        for(int i = 0; i < 3; i++)
+        {
+            std::cout << "\b\b";
+            std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+            std::cout << 2-i << "]" << std::flush;
+        }
+        std::cout << "\b\bTORQUE CONTROL READY]" << std::endl;
 
         KDL::Frame newFrame{};
         while(true)
@@ -266,7 +272,7 @@ int main(int argc, char **argv)
         
         std::cin.get();
         robot->StopApp();
-        
+        */
     }
     
 
@@ -287,7 +293,7 @@ int main(int argc, char **argv)
         }
         robot->StopApp();
         */
-
+        /*
         TerminationHandler t;
         KinovaLiralab::Robot* robot = new KinovaLiralab::Robot("/home/legion/ROS/kinova_ws/src/liralab_kinova/urdf/gen3_ESAOTE_FTSense.urdf"); // _ESAOTE_convex_probe
         TerminationHandler::RegisterCallback([&robot](){robot->StopApp();});
@@ -317,9 +323,88 @@ int main(int argc, char **argv)
 
         }
         robot->StopApp();
-
+        */
     }
     
+    // *****************************************
+    // **************** GRID SEARCH ************
+    // *****************************************
+    {
+        TerminationHandler t;
+        KinovaLiralab::Robot* robot = new KinovaLiralab::Robot("/home/legion/ROS/kinova_ws/src/liralab_kinova/urdf/gen3_ESAOTE_FTSense.urdf"); // _ESAOTE_convex_probe
+        KinovaLiralab::SocketLiralab socket{5022, [&robot]{robot->StopApp();}};
+        
+        // Subscribe callbacks for CTRL-C signal
+        TerminationHandler::RegisterCallback([&robot](){robot->StopApp();});
+        TerminationHandler::RegisterCallback([&socket](){socket.CloseSocket();});
+
+        std::cout << "Position the probe on belly and press ENTER" << std::endl;
+        robot->StartHandGuidance();
+        std::cin.get();
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+
+        // ---------- Wait acknoledge from python
+        while(socket.Read() != "RUN");
+        robot->StopApp();
+        robot->TorqueControl();
+        std::cout << "Wait for torque control... [3]" << std::flush;
+        for(int i = 0; i < 3; i++)
+        {
+            std::cout << "\b\b";
+            std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+            std::cout << 2-i << "]" << std::flush;
+        }
+        std::cout << "\b\bTORQUE CONTROL READY]" << std::endl;
+
+        int GRID_SIZE = 2;
+        float CELL_SIZE_X = 0.02;
+        float CELL_SIZE_Y = 0.02;
+        float CELL_SIZE_Z = 0.02;
+        KDL::Frame nextFrame = robot->GetEEFrame();
+        KDL::Frame initialFrame = nextFrame;
+        float Z0 = initialFrame.p.z();
+
+        for(int z = 0; z < GRID_SIZE; z++)
+        {
+            printf("Layer %d\n", z);
+            for(int x = 0; x < GRID_SIZE; x++)
+            {
+                for(int y = 0; y < GRID_SIZE; y++)
+                {
+                    printf("(%d, %d)\n", x, y);
+
+                    robot->SetEquilibriumPoseWithCustomVelocity(nextFrame, 0.01);
+                    robot->WaitUntilReachedPosition(nextFrame);
+
+                    socket.Write("MEASURE");
+                    float diameter = socket.ReadGridStep();
+        
+                    if(diameter > 0)
+                    {
+                        std::cout << "AORTA DIAMETER: " << diameter << std::endl;
+                        robot->StopApp();
+                        return 0;
+                    }      
+
+                    nextFrame.p[2] = Z0 + 0.02;
+                    robot->SetEquilibriumPoseWithCustomVelocity(nextFrame, 0.01);
+                    robot->WaitUntilReachedPosition(nextFrame);
+
+                    nextFrame.p = initialFrame.p + KDL::Vector(CELL_SIZE_X * x, CELL_SIZE_Y * y, 0.02);
+                    robot->SetEquilibriumPoseWithCustomVelocity(nextFrame, 0.01);
+                    robot->WaitUntilReachedPosition(nextFrame);
+
+                    nextFrame.p[2] = Z0 - CELL_SIZE_Z * z;
+                }
+            }
+        }
+
+        std::cout << "AORTA NOT FOUND" << std::endl;
+        robot->StopApp();
+
+    }
+
     // ********************************************
     // **************** AUROVAS KINOVA ************
     // ********************************************
@@ -387,17 +472,28 @@ int main(int argc, char **argv)
     }
     // robot->StopApp();
 
-    
-    // Subscribe callbacks for CTRL-C signal
-    //TerminationHandler::RegisterCallback([&robot](){robot->StopApp();});
+    /*
+    TerminationHandler t;
+    KinovaLiralab::Robot* robot = new KinovaLiralab::Robot("/home/legion/ROS/kinova_ws/src/ros2_kortex/kortex_description/robots/gen3_ESAOTE_convex_probe.urdf"); // _ESAOTE_convex_probe
+    TerminationHandler::RegisterCallback([&robot](){robot->StopApp();});
 
-    //std::cout << "EXAMPLE" << std::endl;
-    //std::cin.get();
-    //robot->StartHandGuidance();
-    //std::cin.get();
-    //robot->StopApp();
-    //robot->TorqueControl();
-    //KDL::Frame eeFrame = robot->GetEEFrame();
-    //eeFrame.p[0] += 0.07;
-    //robot->SetEquilibriumPose(eeFrame);
+    //std::cout << "EXAMPLE" << std::endl;    
+    robot->TorqueControl();
+    std::cin.get();
+    
+    for(int i = 0; i < 3; i++)
+    {
+        std::cout << i << std::endl;
+        KDL::Frame eeFrame = robot->GetEEFrame();
+        eeFrame.p[2] += 0.05;
+        robot->SetEquilibriumPose(eeFrame);
+    
+        std::this_thread::sleep_for(std::chrono::seconds(2));
+    
+        eeFrame = robot->GetEEFrame();
+        eeFrame.p[2] -= 0.05;
+        robot->SetEquilibriumPose(eeFrame);
+    }
+    robot->StopApp();
+    */
 }

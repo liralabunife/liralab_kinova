@@ -778,6 +778,71 @@ namespace KinovaLiralab
         _meeEquilibriumPose.unlock();
     }
 
+    void Robot::SetEquilibriumPoseWithCustomVelocity(KDL::Frame finalEE, float velocity)
+    {
+        KDL::Frame currentFrame = this->GetEEFrame();
+        KDL::Vector direction = (finalEE.p - currentFrame.p);
+        double distance = direction.Norm();
+        direction = direction/distance;
+
+        using clock = std::chrono::steady_clock;
+        auto last = clock::now();
+        while(true)
+        {
+            // ---- Read dt
+            auto now = clock::now();
+            std::chrono::duration<double> elapsed = now - last;
+            double dt = elapsed.count();
+            last = now;
+            //
+            if((finalEE.p - currentFrame.p).Norm() < 0.01) 
+            {
+                currentFrame = this->GetEEFrame();
+                if((finalEE.p - currentFrame.p).Norm() > 0.01)
+                {
+                    SetEquilibriumPose(finalEE);
+                    std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+                }
+                return;
+            }
+            //
+            direction = (finalEE.p - currentFrame.p);
+            distance = direction.Norm();
+            direction = direction/distance;
+            double step = static_cast<double>(velocity) * dt;
+            step = std::min(step, distance);
+            //
+            currentFrame.p += direction * step;
+            SetEquilibriumPose(currentFrame);
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+    }
+
+    void Robot::WaitUntilReachedPosition(const KDL::Frame& finalPosition, double treshold, int msPollingTime)
+    {
+        double sqrTreshold = treshold*treshold;
+
+        RobotState s = GetRobotState();
+        double sqrDistance = 
+            (finalPosition.p.x() - s._eePose[0])*(finalPosition.p.x() - s._eePose[0]) +
+            (finalPosition.p.y() - s._eePose[1])*(finalPosition.p.y() - s._eePose[1]) +
+            (finalPosition.p.z() - s._eePose[2])*(finalPosition.p.z() - s._eePose[2]);
+
+        while(true)
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+            s = GetRobotState();
+            double sqrDistance = 
+                (finalPosition.p.x() - s._eePose[0])*(finalPosition.p.x() - s._eePose[0]) +
+                (finalPosition.p.y() - s._eePose[1])*(finalPosition.p.y() - s._eePose[1]) +
+                (finalPosition.p.z() - s._eePose[2])*(finalPosition.p.z() - s._eePose[2]);
+            
+            if(sqrDistance < sqrTreshold) 
+            {
+                return;
+            }
+        }
+    }
     /* ------------- */
     /* HAND GUIDANCE */
     /* ------------- */
