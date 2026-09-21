@@ -194,13 +194,12 @@ int main(int argc, char **argv)
     // **************** RUN ACT *******************
     // ********************************************
     {
-        /*
         bool useForceSensor = true;
         TerminationHandler t;
         CanDevice* forceSensor;
         if(useForceSensor) forceSensor = new CanDevice();
         KinovaLiralab::Robot* robot = new KinovaLiralab::Robot("/home/legion/ROS/kinova_ws/src/liralab_kinova/urdf/gen3_ESAOTE_FTSense.urdf"); // _ESAOTE_convex_probe
-        KinovaLiralab::SocketLiralab socket{5009, [&robot]{robot->StopApp();}};
+        KinovaLiralab::SocketLiralab socket{5028, [&robot]{robot->StopApp();}};
 
         // Subscribe callbacks for CTRL-C signal
         TerminationHandler::RegisterCallback([&robot](){robot->StopApp();});
@@ -272,7 +271,6 @@ int main(int argc, char **argv)
         
         std::cin.get();
         robot->StopApp();
-        */
     }
     
 
@@ -330,9 +328,10 @@ int main(int argc, char **argv)
     // **************** GRID SEARCH ************
     // *****************************************
     {
+        /*
         TerminationHandler t;
         KinovaLiralab::Robot* robot = new KinovaLiralab::Robot("/home/legion/ROS/kinova_ws/src/liralab_kinova/urdf/gen3_ESAOTE_FTSense.urdf"); // _ESAOTE_convex_probe
-        KinovaLiralab::SocketLiralab socket{5022, [&robot]{robot->StopApp();}};
+        KinovaLiralab::SocketLiralab socket{5024, [&robot]{robot->StopApp();}};
         
         // Subscribe callbacks for CTRL-C signal
         TerminationHandler::RegisterCallback([&robot](){robot->StopApp();});
@@ -357,13 +356,13 @@ int main(int argc, char **argv)
         }
         std::cout << "\b\bTORQUE CONTROL READY]" << std::endl;
 
-        int GRID_SIZE = 2;
+        int GRID_SIZE = 5;
         float CELL_SIZE_X = 0.02;
         float CELL_SIZE_Y = 0.02;
         float CELL_SIZE_Z = 0.02;
         KDL::Frame nextFrame = robot->GetEEFrame();
         KDL::Frame initialFrame = nextFrame;
-        float Z0 = initialFrame.p.z();
+        float Z0 = initialFrame.p.z() - 0.01;
 
         for(int z = 0; z < GRID_SIZE; z++)
         {
@@ -402,7 +401,7 @@ int main(int argc, char **argv)
 
         std::cout << "AORTA NOT FOUND" << std::endl;
         robot->StopApp();
-
+        */
     }
 
     // ********************************************
