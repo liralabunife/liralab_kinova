@@ -194,12 +194,13 @@ int main(int argc, char **argv)
     // **************** RUN ACT *******************
     // ********************************************
     {
+        /*
         bool useForceSensor = true;
         TerminationHandler t;
         CanDevice* forceSensor;
         if(useForceSensor) forceSensor = new CanDevice();
         KinovaLiralab::Robot* robot = new KinovaLiralab::Robot("/home/legion/ROS/kinova_ws/src/liralab_kinova/urdf/gen3_ESAOTE_FTSense.urdf"); // _ESAOTE_convex_probe
-        KinovaLiralab::SocketLiralab socket{5028, [&robot]{robot->StopApp();}};
+        KinovaLiralab::SocketLiralab socket{5023, [&robot]{robot->StopApp();}};
 
         // Subscribe callbacks for CTRL-C signal
         TerminationHandler::RegisterCallback([&robot](){robot->StopApp();});
@@ -271,6 +272,7 @@ int main(int argc, char **argv)
         
         std::cin.get();
         robot->StopApp();
+        */
     }
     
 
@@ -279,15 +281,41 @@ int main(int argc, char **argv)
     // ********************************************
     
     {
+
+        TerminationHandler t;
+        KinovaLiralab::Robot* robot = new KinovaLiralab::Robot("/home/legion/ROS/kinova_ws/src/liralab_kinova/urdf/gen3_ESAOTE_FTSense.urdf"); // _ESAOTE_convex_probe
+        TerminationHandler::RegisterCallback([&robot](){robot->StopApp();});
+
+        std::cout << "Position the probe on belly and press ENTER" << std::endl;
+        robot->StartHandGuidance();
+        std::cin.get();
+        robot->StopApp();
+
+        // Congela x,y,rotazione alla posa in cui e' stata posizionata la sonda:
+        // sara' il target FISSO per tutto il test, mentre z segue il PID di forza.
+        KDL::Frame xyFrame = robot->GetEEFrame();
+        std::cout << "Ancora x,y,rot: " << xyFrame.p[0] << ", " << xyFrame.p[1] << ", " << xyFrame.p[2] << std::endl;
+
+        ZForceControl* zForceControl = new ZForceControl(robot);
+        robot->TorqueControl();
+
+        double fzRef = -12.0;
+        while(true)
+        {
+            zForceControl->RunControlHybrid(fzRef, xyFrame);
+        }
+
+        robot->StopApp();
+        return 0;
         /*
         TerminationHandler t;
         KinovaLiralab::Robot* robot = new KinovaLiralab::Robot("/home/legion/ROS/kinova_ws/src/liralab_kinova/urdf/gen3_ESAOTE_FTSense.urdf"); // _ESAOTE_convex_probe
         TerminationHandler::RegisterCallback([&robot](){robot->StopApp();});
-        //ZForceControl* zForceControl = new ZForceControl(robot);
-        robot->StartHandGuidance();
+        ZForceControl* zForceControl = new ZForceControl(robot);
+        robot->TorqueControl();
         while(true)
         {
-            //zForceControl->RunControl(-12.0);
+            zForceControl->RunControl(3.0);
         }
         robot->StopApp();
         */

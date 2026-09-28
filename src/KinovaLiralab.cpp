@@ -586,7 +586,8 @@ namespace KinovaLiralab
             KDL::JntArray eqVel(7);                     // [RAD/s]  equilibrium velocity
             KDL::JntArray tau(7),g(7);
             Eigen::VectorXd Kp(7), Kd(7);
-            Kp << 60, 50, 40, 30, 25, 10, 5;
+            // Kp << 60, 50, 40, 30, 25, 10, 5;
+            Kp << 90, 80, 60, 40, 30, 15, 5;
             Kd << 10,  5,  5,  3,  2,  1,  0.5;
             try
             {
