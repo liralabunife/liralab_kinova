@@ -9,9 +9,10 @@
 class ZForceControl
 {
     public:
-        ZForceControl(KinovaLiralab::Robot* robot);
+        ZForceControl(KinovaLiralab::Robot* robot, CanDevice* forceSensor);
         void RunControl(double fzRef);
-        void RunControlHybrid(double fzRef, const KDL::Frame& policyTargetFrame);
+        void RunControlHybrid_test(double fzRef, const KDL::Frame& policyTargetFrame);
+        void RunControlHybrid(double xTarget, double yTarget, double fzTarget);
     private:
         KinovaLiralab::Robot* _robot;
         CanDevice* _forceSensor;
@@ -33,34 +34,33 @@ class ZForceControl
         double _integralMin = -0.05;
         double _integralMax = 0.05;
 
+        // Keeping initial rotation
+        KDL::Rotation _heldRotation;
+        bool _rotationInitialized = false;
+
         std::chrono::steady_clock::time_point _lastTime;
         int frame_to_save = 200;
         std::ofstream* _csvFile;
+        KDL::Frame z_delta_world;
 };
 
-ZForceControl::ZForceControl(KinovaLiralab::Robot* robot) : _robot{robot}
+ZForceControl::ZForceControl(KinovaLiralab::Robot* robot, CanDevice* forceSensor) : _robot{robot}
 {
-    _forceSensor = new CanDevice();
+    _forceSensor = forceSensor;
 
     if(!_forceSensor->Open("can0")) {"Cannot open CAN";return;}
 
     _forceSensor->InitCompensation();
     _lastTime = std::chrono::steady_clock::now();
 
-    while (!_forceSensor->IsWrenchReady())
-    {
-        _forceSensor->Receive();
-        std::cout << "Waiting for can msgs...\n";
-    }
-
     _forceSensor->SetTare();
     std::cout << "Opening file" << std::endl;
     _csvFile = new std::ofstream("sensor_data.csv");
-    *_csvFile << "timestamp,force_z,error\n";
+    *_csvFile << "timestamp,z_current,z_target,fz_current,fz_target\n";
     std::cout << "File opened" << std::endl;
 }
 
-void ZForceControl::RunControlHybrid(double fzRef, const KDL::Frame& xyFrame)
+void ZForceControl::RunControlHybrid_test(double fzRef, const KDL::Frame& xyFrame)
 {
     while (!_forceSensor->IsWrenchReady())
         _forceSensor->Receive();
@@ -117,6 +117,81 @@ void ZForceControl::RunControlHybrid(double fzRef, const KDL::Frame& xyFrame)
               << _wrench[2] << "," << dz << "\n";
     frame_to_save--;
     if(frame_to_save == 0) _csvFile->close();
+}
+
+void ZForceControl::RunControlHybrid(double xTarget, double yTarget, double fzTarget)
+{
+    while (!_forceSensor->IsWrenchReady())
+        _forceSensor->Receive();
+
+    KinovaLiralab::RobotState newState = _robot->GetRobotState();
+    _forceSensor->ReceiveAllForceAndTorque();
+    _forceSensor->GetWrenchCompensated(_wrench, newState);
+    //std::cout << (fzTarget - 50.0 * (newState._eePose[2] - z_delta_world.p[2])) << std::endl;
+    double error = fzTarget - _wrench[2]- 100.0 * (newState._eePose[2] - z_delta_world.p[2]);
+
+    auto now = std::chrono::steady_clock::now();
+    double dt = std::chrono::duration<double>(now - _lastTime).count();
+    _lastTime = now;
+    if (dt <= 0.0) dt = 1e-3;
+
+    double P = _kP * error;
+    double integralCandidate = _integral + error * dt;
+    double derivative = (error - _previousError) / dt;
+    double D = _kD * derivative;
+
+    double dzUnsaturated = P + _kI * integralCandidate + D;
+    double dz = std::clamp(dzUnsaturated, _dzMin, _dzMax);
+
+    bool saturatedHigh = dzUnsaturated > _dzMax;
+    bool saturatedLow  = dzUnsaturated < _dzMin;
+    bool errorWouldIncreaseSaturation = (saturatedHigh && error > 0.0) || (saturatedLow && error < 0.0);
+    if (!errorWouldIncreaseSaturation)
+        _integral = std::clamp(integralCandidate, _integralMin, _integralMax);
+
+    _previousError = error;
+
+    KDL::Rotation currentRot(
+        newState._eePose[3], newState._eePose[4], newState._eePose[5],
+        newState._eePose[6], newState._eePose[7], newState._eePose[8],
+        newState._eePose[9], newState._eePose[10], newState._eePose[11]
+    );
+    KDL::Frame T_w_ee(
+        currentRot,
+        KDL::Vector(newState._eePose[0], newState._eePose[1], newState._eePose[2])
+    );
+
+    // Orientazione: congelata alla prima chiamata, poi tenuta fissa
+    if (!_rotationInitialized)
+    {
+        _heldRotation = currentRot;
+        _rotationInitialized = true;
+    }
+
+    // z: offset del PID di forza, applicato nel frame locale corrente
+    KDL::Frame ee_offset = KDL::Frame::Identity();
+    ee_offset.p[2] = -dz;
+
+    z_delta_world = T_w_ee * ee_offset;
+
+    // x,y dai target, z dal PID di forza, rotazione tenuta fissa
+    KDL::Frame T_w_target(
+        _heldRotation,
+        KDL::Vector(xTarget, yTarget, z_delta_world.p[2])
+    );
+
+    std::cout << "target z: " << T_w_target.p[2] << " | current z: " << T_w_ee.p.z() << " | fz: " << _wrench[2] << " | dz: " << dz << " | target force: " << fzTarget << std::endl;
+
+    _robot->SetEquilibriumPose(T_w_target);
+
+    *_csvFile << std::chrono::duration_cast<std::chrono::nanoseconds>(now.time_since_epoch()).count() << ","
+              << T_w_ee.p.z() << "," << T_w_target.p[2] << "," <<_wrench[2] << "," << fzTarget <<"\n";
+    frame_to_save--;
+    if (frame_to_save == 0) 
+    {
+        std::cout << "FILE SAVED <<<<<<<<<<<" << std::endl;
+        _csvFile->close();
+    }
 }
 
 void ZForceControl::RunControl(double fzRef)

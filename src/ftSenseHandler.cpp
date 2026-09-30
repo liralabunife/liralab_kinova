@@ -374,6 +374,13 @@
         this->com_sensor_payload = com_sensor_payload;
         this->payload_mass = payloadMass;
         this->compensationIsReady = true;
+
+
+        while (!this->IsWrenchReady())
+        {
+            this->Receive();
+            std::cout << "Waiting for can msgs...\n";
+        }
     }
 
     void CanDevice::GetValues(unsigned short int *value){

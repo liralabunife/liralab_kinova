@@ -26,6 +26,7 @@ namespace KinovaLiralab
         int Write(const std::string&);
         auto Read() -> std::string;
         int ReadFrame(KDL::Frame&);
+        int ReadForceControlCommand(double &x, double &y, double &fz);
         float ReadGridStep();
     };
     
@@ -116,6 +117,29 @@ namespace KinovaLiralab
         outFrame.p = p;
         outFrame.M = R;
         return 0;
+    }
+
+    int SocketLiralab::ReadForceControlCommand(double &x, double &y, double &fz)
+    {
+        std::string resultAsString = Read();
+
+        std::vector<double> v;
+        std::stringstream ss(resultAsString);
+        std::string token;
+
+        while (std::getline(ss, token, ';')) {v.push_back(std::stod(token));}
+
+        if (v.size() != 4) {
+            std::cout << "String must contain exactly 4 values:\nREAD: " << resultAsString << std::endl;
+            _brokenPipeCallback();
+            return -1;
+        }
+
+        x = v[0];
+        y = v[1];
+        fz = v[3];
+
+        return 0;        
     }
 
     float SocketLiralab::ReadGridStep()

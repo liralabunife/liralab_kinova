@@ -216,12 +216,6 @@ int main(int argc, char **argv)
             if(!forceSensor->Open("can0")) {std::cout << "Cannot open CAN\n" << std::endl;return -1;}
             else std::cout << "CAN Opened\n" << std::endl;
             forceSensor->InitCompensation();
-
-            while (!forceSensor->IsWrenchReady())
-            {
-                forceSensor->Receive();
-                std::cout << "Waiting for can msgs...\n";
-            }
         }
         bool setTare = true;  
         double sensorWrench[6];
@@ -281,8 +275,9 @@ int main(int argc, char **argv)
     // ********************************************
     
     {
-
+        /*
         TerminationHandler t;
+        CanDevice* forceSensor = new CanDevice();
         KinovaLiralab::Robot* robot = new KinovaLiralab::Robot("/home/legion/ROS/kinova_ws/src/liralab_kinova/urdf/gen3_ESAOTE_FTSense.urdf"); // _ESAOTE_convex_probe
         TerminationHandler::RegisterCallback([&robot](){robot->StopApp();});
 
@@ -296,60 +291,89 @@ int main(int argc, char **argv)
         KDL::Frame xyFrame = robot->GetEEFrame();
         std::cout << "Ancora x,y,rot: " << xyFrame.p[0] << ", " << xyFrame.p[1] << ", " << xyFrame.p[2] << std::endl;
 
-        ZForceControl* zForceControl = new ZForceControl(robot);
+        ZForceControl* zForceControl = new ZForceControl(robot,forceSensor);
         robot->TorqueControl();
 
-        double fzRef = -12.0;
+        double fzRef = -5.0;
+        double dt = 0;
+        auto start = std::chrono::high_resolution_clock::now();
+        auto end = std::chrono::high_resolution_clock::now();
+        double time = 0;
+
         while(true)
         {
-            zForceControl->RunControlHybrid(fzRef, xyFrame);
+            start = std::chrono::high_resolution_clock::now();
+            double z = fzRef + 5.0 * std::sin(time * 6.0 * 3.14159);
+            zForceControl->RunControlHybrid(xyFrame.p[0], xyFrame.p[1], z);
+            end = std::chrono::high_resolution_clock::now();
+            time = time + std::chrono::duration<double>(end - start).count();
         }
 
         robot->StopApp();
         return 0;
-        /*
-        TerminationHandler t;
-        KinovaLiralab::Robot* robot = new KinovaLiralab::Robot("/home/legion/ROS/kinova_ws/src/liralab_kinova/urdf/gen3_ESAOTE_FTSense.urdf"); // _ESAOTE_convex_probe
-        TerminationHandler::RegisterCallback([&robot](){robot->StopApp();});
-        ZForceControl* zForceControl = new ZForceControl(robot);
-        robot->TorqueControl();
-        while(true)
-        {
-            zForceControl->RunControl(3.0);
-        }
-        robot->StopApp();
         */
-        /*
+
         TerminationHandler t;
-        KinovaLiralab::Robot* robot = new KinovaLiralab::Robot("/home/legion/ROS/kinova_ws/src/liralab_kinova/urdf/gen3_ESAOTE_FTSense.urdf"); // _ESAOTE_convex_probe
-        TerminationHandler::RegisterCallback([&robot](){robot->StopApp();});
-
         CanDevice* forceSensor = new CanDevice();
-        if(!forceSensor->Open("can0")) {"Cannot open CAN";return 0;}
-        forceSensor->InitCompensation();
-        double sensorWrench[6];
-        KinovaLiralab::RobotState state;
-        while (!forceSensor->IsWrenchReady())
-        {
-            forceSensor->Receive();
-            std::cout << "Waiting for can msgs...\n";
-        }
+        KinovaLiralab::Robot* robot = new KinovaLiralab::Robot("/home/legion/ROS/kinova_ws/src/liralab_kinova/urdf/gen3_ESAOTE_FTSense.urdf"); // _ESAOTE_convex_probe
+        KinovaLiralab::SocketLiralab socket{5024, [&robot]{robot->StopApp();}};
 
+        // Subscribe callbacks for CTRL-C signal
+        TerminationHandler::RegisterCallback([&robot](){robot->StopApp();});
+        TerminationHandler::RegisterCallback([&socket](){socket.CloseSocket();});
+
+        std::cout << "Position the probe on belly and press ENTER" << std::endl;
         robot->StartHandGuidance();
-        std::this_thread::sleep_for(std::chrono::milliseconds(2000));
-        forceSensor->SetTare();
+        std::cin.get();
 
+        bool setTare = true;
+        double sensorWrench[6];
+
+        // ---------- Send initial position
+        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+        KinovaLiralab::RobotState state = robot->GetRobotState();
+        socket.WriteRobotState(state, sensorWrench, true); // sensorWrench is not usefull
+
+        // ---------- Wait acknoledge from python
+        while(socket.Read() != "RUN");
+        robot->StopApp();
+        robot->TorqueControl();
+        std::cout << "Wait for torque control... [3]" << std::flush;
+        for(int i = 0; i < 3; i++)
+        {
+            std::cout << "\b\b";
+            std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+            std::cout << 2-i << "]" << std::flush;
+        }
+        std::cout << "\b\bTORQUE CONTROL READY]" << std::endl;
+        robot->StopApp();
+
+        ZForceControl* zForceControl = new ZForceControl(robot, forceSensor);
+        robot->TorqueControl();
+
+        double x,y,fz;
         while(true)
         {
+            if(setTare)
+            {
+                setTare = false;
+                forceSensor->SetTare();
+            }
+
+            // Prepare inputs
             state = robot->GetRobotState();
             forceSensor->ReceiveAllForceAndTorque();   
             forceSensor->GetWrenchCompensated(sensorWrench, state);
-            std::cout << "Comp: " << sensorWrench[0] << ", " << sensorWrench[1] << ", " << sensorWrench[2] << "\n";          
-            std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-
+            // Send to python
+            socket.WriteRobotState(state, sensorWrench, true);
+            //
+            if(socket.ReadForceControlCommand(x,y,fz) < 0) break;
+            zForceControl->RunControlHybrid(x,y, fz);
         }
+
         robot->StopApp();
-        */
+        return 0;
+
     }
     
     // *****************************************
