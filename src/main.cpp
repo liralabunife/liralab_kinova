@@ -188,7 +188,7 @@ int main(int argc, char **argv)
         datasetRecorder.StopRecord();
         robot->StopApp();
         */
-    } 
+    }
 
     // ********************************************
     // **************** RUN ACT *******************
@@ -275,44 +275,6 @@ int main(int argc, char **argv)
     // ********************************************
     
     {
-        /*
-        TerminationHandler t;
-        CanDevice* forceSensor = new CanDevice();
-        KinovaLiralab::Robot* robot = new KinovaLiralab::Robot("/home/legion/ROS/kinova_ws/src/liralab_kinova/urdf/gen3_ESAOTE_FTSense.urdf"); // _ESAOTE_convex_probe
-        TerminationHandler::RegisterCallback([&robot](){robot->StopApp();});
-
-        std::cout << "Position the probe on belly and press ENTER" << std::endl;
-        robot->StartHandGuidance();
-        std::cin.get();
-        robot->StopApp();
-
-        // Congela x,y,rotazione alla posa in cui e' stata posizionata la sonda:
-        // sara' il target FISSO per tutto il test, mentre z segue il PID di forza.
-        KDL::Frame xyFrame = robot->GetEEFrame();
-        std::cout << "Ancora x,y,rot: " << xyFrame.p[0] << ", " << xyFrame.p[1] << ", " << xyFrame.p[2] << std::endl;
-
-        ZForceControl* zForceControl = new ZForceControl(robot,forceSensor);
-        robot->TorqueControl();
-
-        double fzRef = -5.0;
-        double dt = 0;
-        auto start = std::chrono::high_resolution_clock::now();
-        auto end = std::chrono::high_resolution_clock::now();
-        double time = 0;
-
-        while(true)
-        {
-            start = std::chrono::high_resolution_clock::now();
-            double z = fzRef + 5.0 * std::sin(time * 6.0 * 3.14159);
-            zForceControl->RunControlHybrid(xyFrame.p[0], xyFrame.p[1], z);
-            end = std::chrono::high_resolution_clock::now();
-            time = time + std::chrono::duration<double>(end - start).count();
-        }
-
-        robot->StopApp();
-        return 0;
-        */
-
         TerminationHandler t;
         CanDevice* forceSensor = new CanDevice();
         KinovaLiralab::Robot* robot = new KinovaLiralab::Robot("/home/legion/ROS/kinova_ws/src/liralab_kinova/urdf/gen3_ESAOTE_FTSense.urdf"); // _ESAOTE_convex_probe
@@ -373,7 +335,6 @@ int main(int argc, char **argv)
 
         robot->StopApp();
         return 0;
-
     }
     
     // *****************************************

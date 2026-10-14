@@ -83,7 +83,7 @@ namespace KinovaLiralab
     {
         ssize_t bytes = recv(_client, buffer, sizeof(buffer) - 1, 0);
         if (bytes <= 0) { perror("recv");return ""; }
-        std::string received(buffer);
+        std::string received(buffer, bytes);
         //std::cout << "<<< " << received << "\n";
         return received;
     }
@@ -127,6 +127,7 @@ namespace KinovaLiralab
         std::stringstream ss(resultAsString);
         std::string token;
 
+        if(resultAsString == "QUIT") return -1;
         while (std::getline(ss, token, ';')) {v.push_back(std::stod(token));}
 
         if (v.size() != 4) {

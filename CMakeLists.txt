@@ -30,7 +30,7 @@ set_target_properties(libKortexApiCpp PROPERTIES IMPORTED_LOCATION ${PROJECT_SOU
 
 
 # Aggiungi l'eseguibile
-add_executable(liralab_kinova src/main.cpp src/KinovaLiralab.cpp src/ftSenseHandler.cpp)
+add_executable(liralab_kinova src/mainGUI.cpp src/KinovaLiralab.cpp src/ftSenseHandler.cpp)
 
 # Linka l'eseguibile con la libreria statica
 target_link_libraries(liralab_kinova libKortexApiCpp Eigen3::Eigen)
