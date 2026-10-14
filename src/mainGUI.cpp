@@ -26,7 +26,7 @@ int main(int argc, char **argv)
     TerminationHandler t;
     CanDevice* forceSensor = new CanDevice();
     KinovaLiralab::Robot* robot = new KinovaLiralab::Robot("/home/legion/ROS/kinova_ws/src/liralab_kinova/urdf/gen3_ESAOTE_FTSense.urdf"); // _ESAOTE_convex_probe
-    KinovaLiralab::SocketLiralab socket{5025, [&robot]{robot->StopApp();}};
+    KinovaLiralab::SocketLiralab socket{5026, [&robot]{robot->StopApp();}};
 
     // Subscribe callbacks for CTRL-C signal
     TerminationHandler::RegisterCallback([&robot](){robot->StopApp();});
@@ -39,25 +39,16 @@ int main(int argc, char **argv)
         while(app != "AORTA" && app != "JUGULAR" && app != "QUIT");
     
         // ********************************************
-        // ************** Z FORCE CONTROL *************
+        // ************ GRID CONTROL AORTA ************
         // ********************************************
         if(app == "AORTA")
         {
             std::cout << "Position the probe on belly and press START" << std::endl;
             robot->StartHandGuidance();
-            std::string msg = socket.Read();
-            while(msg != "START");
-    
-            bool setTare = true;
-            double sensorWrench[6];
-    
-            // ---------- Send initial position
+            while(socket.Read() != "START");
             std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-            KinovaLiralab::RobotState state = robot->GetRobotState();
-            socket.WriteRobotState(state, sensorWrench, true); // sensorWrench is not usefull
-    
+
             // ---------- Wait acknoledge from python
-            while(socket.Read() != "RUN");
             robot->StopApp();
             robot->TorqueControl();
             std::cout << "Wait for torque control... [3]" << std::flush;
@@ -68,29 +59,47 @@ int main(int argc, char **argv)
                 std::cout << 2-i << "]" << std::flush;
             }
             std::cout << "\b\bTORQUE CONTROL READY]" << std::endl;
-            robot->StopApp();
+            int GRID_SIZE = 5;
+            float CELL_SIZE_X = 0.02;
+            float CELL_SIZE_Y = 0.02;
+            float CELL_SIZE_Z = 0.02;
+            KDL::Frame nextFrame = robot->GetEEFrame();
+            KDL::Frame initialFrame = nextFrame;
+            float Z0 = initialFrame.p.z() - 0.01;
     
-            ZForceControl* zForceControl = new ZForceControl(robot, forceSensor);
-            robot->TorqueControl();
-    
-            double x,y,fz;
-            while(true)
+            for(int z = 0; z < GRID_SIZE; z++)
             {
-                if(setTare)
+                printf("Layer %d\n", z);
+                for(int x = 0; x < GRID_SIZE; x++)
                 {
-                    setTare = false;
-                    forceSensor->SetTare();
-                }
+                    for(int y = 0; y < GRID_SIZE; y++)
+                    {
+                        printf("(%d, %d)\n", x, y);
     
-                // Prepare inputs
-                state = robot->GetRobotState();
-                forceSensor->ReceiveAllForceAndTorque();   
-                forceSensor->GetWrenchCompensated(sensorWrench, state);
-                // Send to python
-                socket.WriteRobotState(state, sensorWrench, true);
-                //
-                if(socket.ReadForceControlCommand(x,y,fz) < 0) goto end_app;
-                zForceControl->RunControlHybrid(x,y, fz);
+                        robot->SetEquilibriumPoseWithCustomVelocity(nextFrame, 0.01);
+                        robot->WaitUntilReachedPosition(nextFrame);
+    
+                        socket.Write("MEASURE");
+                        float diameter = socket.ReadGridStep();
+            
+                        if(diameter > 0)
+                        {
+                            std::cout << "AORTA DIAMETER: " << diameter << std::endl;
+                            while(socket.Read() != "QUIT");
+                            goto end_app;   // fuck yea a goto to perform multiple breaks
+                        }      
+    
+                        nextFrame.p[2] = Z0 + 0.02;
+                        robot->SetEquilibriumPoseWithCustomVelocity(nextFrame, 0.01);
+                        robot->WaitUntilReachedPosition(nextFrame);
+    
+                        nextFrame.p = initialFrame.p + KDL::Vector(CELL_SIZE_X * x, CELL_SIZE_Y * y, 0.02);
+                        robot->SetEquilibriumPoseWithCustomVelocity(nextFrame, 0.01);
+                        robot->WaitUntilReachedPosition(nextFrame);
+    
+                        nextFrame.p[2] = Z0 - CELL_SIZE_Z * z;
+                    }
+                }
             }
         }
         
@@ -99,10 +108,9 @@ int main(int argc, char **argv)
         // *****************************************
         if(app == "JUGULAR")
         {   
-            std::cout << "Position the probe on the neck and press ENTER" << std::endl;
+            std::cout << "Position the probe on the neck and press START" << std::endl;
             robot->StartHandGuidance();
-            std::cin.get();
-    
+            while(socket.Read() != "START");
             std::this_thread::sleep_for(std::chrono::milliseconds(1000));
     
             // ---------- Wait acknoledge from python
